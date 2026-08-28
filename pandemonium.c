@@ -1,7 +1,6 @@
 #include "pandemonium.h"
 
 #include <stdint.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/random.h>
@@ -55,12 +54,13 @@ uint64_t pandemonium_xorshift64star_next(void)
     return xorshift_state * 0x2545F4914F6CDD1DULL;
 }
 
+// x must be nonzero
 uint64_t pandemonium_xorshift64star(uint64_t x)
 {
-    xorshift_state ^= xorshift_state >> 12;
-    xorshift_state ^= xorshift_state << 25;
-    xorshift_state ^= xorshift_state >> 27;
-    return xorshift_state * 0x2545F4914F6CDD1DULL;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    return x * 0x2545F4914F6CDD1DULL;
 }
 
 /*******************************************************/
@@ -85,21 +85,20 @@ int pandemonium_csprng_uint64(uint64_t* buf)
     return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
 }
 
+/*******************************************************/
 
 int pandemonium_csprng_uint8_arr(uint8_t* buf, const size_t count)
 {
     const size_t size = count * sizeof(*buf);
-    buf = malloc(size);
-    if (buf == NULL)
+    if (buf == NULL || size > 256)
         return 1;
     return (getrandom(buf, size, 0) != size);
 }
 
 int pandemonium_csprng_uint16_arr(uint16_t* buf, const size_t count)
 {
-    const size_t size = count * sizeof(*buf);
-    buf = malloc(size);
-    if (buf == NULL)
+    const size_t size = size  * sizeof(*buf);
+    if (buf == NULL || size > 256)
         return 1;
     return (getrandom(buf, size, 0) != size);
 }
@@ -107,8 +106,7 @@ int pandemonium_csprng_uint16_arr(uint16_t* buf, const size_t count)
 int pandemonium_csprng_uint32_arr(uint32_t* buf, const size_t count)
 {
     const size_t size = count * sizeof(*buf);
-    buf = malloc(size);
-    if (buf == NULL)
+    if (buf == NULL || size > 256)
         return 1;
     return (getrandom(buf, size, 0) != size);
 }
@@ -116,22 +114,32 @@ int pandemonium_csprng_uint32_arr(uint32_t* buf, const size_t count)
 int pandemonium_csprng_uint64_arr(uint64_t* buf, const size_t count)
 {
     const size_t size = count * sizeof(*buf);
-    buf = malloc(size);
-    if (buf == NULL)
+    if (buf == NULL || size > 256)
         return 1;
     return (getrandom(buf, size, 0) != size);
 }
 
-// returns a random double in [0,1), returns 0 on success
-int pandemonium_csprng_double(double* out)
+/*******************************************************/
+
+// Returns 0 on sucess
+int pandemonium_csprng_uint8_range(uint8_t* buf, const size_t count, const uint8_t max) 
 {
-    uint64_t buf;
-    if (getrandom(&buf, sizeof(buf), 0) != sizeof(buf))
+    if (max == 0 || buf == NULL || count > 256)
         return 1;
-    buf = (0x3FFULL << 52) | (buf >> 12);
-    *out = *((double*)(&buf)) - 1.0;
+
+    const unsigned int bits = (unsigned int)(32 - __builtin_clz((unsigned int)max));
+    const uint8_t mask = (uint8_t)((1u << bits) - 1u);
+
+    for (size_t i = 0; i < count; ++i) {
+        do {
+            if (sizeof(*buf) != getrandom(buf + i, sizeof(*buf), 0))
+                return 1;
+            buf[i] &= mask;
+        } while (buf[i] > max);
+    }
     return 0;
 }
+
 
 /*******************************************************/
 
