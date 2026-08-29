@@ -20,5 +20,8 @@ int       pandemonium_csprng_uint16_arr(uint16_t* buf, const size_t count);
 int       pandemonium_csprng_uint32_arr(uint32_t* buf, const size_t count);
 int       pandemonium_csprng_uint64_arr(uint64_t* buf, const size_t count);
 int       pandemonium_csprng_uint8_range(uint8_t* buf, const size_t count, const uint8_t max);
+int       pandemonium_csprng_uint16_range(uint16_t* buf, const size_t count, const uint16_t max);
+int       pandemonium_csprng_uint32_range(uint32_t* buf, const size_t count, const uint32_t max);
+int       pandemonium_csprng_uint64_range(uint64_t* buf, const size_t count, const uint64_t max);
 
 #endif
