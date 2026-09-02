@@ -3,18 +3,20 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/random.h>
+#include <assert.h>
+#include <errno.h>
 
 #define ROTL(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
 #define QR(a, b, c, d) do {      \
-a += b; d ^= a; d = ROTL(d, 16); \
-c += d; b ^= c; b = ROTL(b, 12); \
-a += b; d ^= a; d = ROTL(d,  8); \
-c += d; b ^= c; b = ROTL(b,  7); \
+(a) += (b); (d) ^= (a); (d) = ROTL((d), 16); \
+(c) += (d); (b) ^= (c); (b) = ROTL((b), 12); \
+(a) += (b); (d) ^= (a); (d) = ROTL((d),  8); \
+(c) += (d); (b) ^= (c); (b) = ROTL((b),  7); \
 } while (0)
 
 #define ROUNDS 20
-
 
 static uint64_t splitmix_state = 0;
 static uint64_t xorshift_state = 1;
@@ -65,6 +67,7 @@ uint64_t pandemonium_xorshift64star(uint64_t x)
 
 /*******************************************************/
 
+// These functions don't check for null, that is by design.
 int pandemonium_csprng_uint8(uint8_t* buf)
 {
     return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
@@ -87,115 +90,75 @@ int pandemonium_csprng_uint64(uint64_t* buf)
 
 /*******************************************************/
 
-int pandemonium_csprng_uint8_arr(uint8_t* buf, const size_t count)
+int pandemonium_csprng_arr(void* buf, const size_t count, const size_t size)
 {
-    const size_t size = count * sizeof(*buf);
-    if (buf == NULL || count > (256 / sizeof(*buf)))
+    if (buf == NULL || count == 0 || size == 0)
         return 1;
-    return ((ssize_t)size != getrandom(buf, size, 0));
-}
+    if (count > SIZE_MAX / size)
+        return 1;
 
-int pandemonium_csprng_uint16_arr(uint16_t* buf, const size_t count)
-{
-    const size_t size = count * sizeof(*buf);
-    if (buf == NULL || count > (256 / sizeof(*buf)))
-        return 1;
-    return ((ssize_t)size != getrandom(buf, size, 0));
-}
+    const size_t total_bytes = count * size;
+    size_t remaining_bytes = total_bytes;
 
-int pandemonium_csprng_uint32_arr(uint32_t* buf, const size_t count)
-{
-    const size_t size = count * sizeof(*buf);
-    if (buf == NULL || count > (256 / sizeof(*buf)))
-        return 1;
-    return ((ssize_t)size != getrandom(buf, size, 0));
-}
-
-int pandemonium_csprng_uint64_arr(uint64_t* buf, const size_t count)
-{
-    const size_t size = count * sizeof(*buf);
-    if (buf == NULL || count > (256 / sizeof(*buf)))
-        return 1;
-    return ((ssize_t)size != getrandom(buf, size, 0));
+    while (remaining_bytes > 0) {
+        const ssize_t result = getrandom((unsigned char*)buf + total_bytes - remaining_bytes, remaining_bytes, 0);
+        fprintf(stderr, "Random bytes written: %zd\n", result);
+        if (result == -1) {
+            if (errno == EINTR)
+                continue;   // interrupted by a signal before any bytes were read, just retry
+            return 1;
+        }
+        assert((size_t)result <= remaining_bytes);
+        remaining_bytes = remaining_bytes - (size_t)result;
+    }
+    return 0;
 }
 
 /*******************************************************/
 
-// Returns 0 on sucess
-int pandemonium_csprng_uint8_range(uint8_t* buf, const size_t count, const uint8_t max) 
+int pandemonium_csprng_range(void* buf, const size_t count, const size_t size, const uint64_t max)
 {
-    if (max == 0 || buf == NULL)
+    if (buf == NULL || count == 0 || size == 0 || size > 8 || max == 0)
+        return 1;
+    if (count > SIZE_MAX / size)
         return 1;
 
-    const int bits = 32 - __builtin_clz((unsigned int)max);
-    const uint8_t mask = (uint8_t)((bits == 8) ? (UINT8_MAX) : ((1u << bits) - 1u));
+    const size_t total_bytes = count * size;
+    const int sig_bits = 64 - __builtin_clzll(max);
+    const uint64_t mask = (sig_bits == 64) ? (UINT64_MAX) : ((1UL << sig_bits) - 1UL);
 
-    for (size_t i = 0; i < count; ++i) {
-        do {
-            if (sizeof(*buf) != getrandom(buf + i, sizeof(*buf), 0))
-                return 1;
-            buf[i] &= mask;
-        } while (buf[i] > max);
-    }
-    return 0;
-}
-
-
-int pandemonium_csprng_uint16_range(uint16_t* buf, const size_t count, const uint16_t max) 
-{
-    if (max == 0 || buf == NULL)
+    void* random_bytes = malloc(total_bytes < 256 ? 256 : total_bytes);
+    if (random_bytes == NULL)
         return 1;
 
-    const int bits = 32 - __builtin_clz((unsigned int)max);
-    const uint16_t mask = (uint16_t)((bits == 16) ? (UINT16_MAX) : ((1U << bits) - 1U));
+    size_t buf_index = 0;
+    while (buf_index < total_bytes) {
+        const size_t chunk_size = (total_bytes - buf_index < 256) ? 256 : (total_bytes - buf_index);
+        if (pandemonium_csprng_arr(random_bytes, chunk_size, 1))
+            goto CLEANUP;
 
-    for (size_t i = 0; i < count; ++i) {
-        do {
-            if (sizeof(*buf) != getrandom(buf + i, sizeof(*buf), 0))
-                return 1;
-            buf[i] &= mask;
-        } while (buf[i] > max);
+        for (size_t i = 0; (i + size) <= chunk_size; i += size) {
+            uint64_t candidate = 0;
+            memcpy(&candidate, (unsigned char*)random_bytes + i, size);
+            candidate &= mask;
+
+            if (candidate > max) continue;
+            memcpy((unsigned char*)buf + buf_index, &candidate, size);
+            buf_index += size;
+            if (!((buf_index + size) <= total_bytes))
+                break;
+        }
     }
+
+    free(random_bytes);
     return 0;
+CLEANUP:
+    free(random_bytes);
+    return 1;
 }
 
-int pandemonium_csprng_uint32_range(uint32_t* buf, const size_t count, const uint32_t max) 
-{
-    if (max == 0 || buf == NULL)
-        return 1;
-
-    const int bits = 32 - __builtin_clz(max);
-    const uint32_t mask = (bits == 32) ? (UINT32_MAX) : ((1U << bits) - 1U);
-
-    for (size_t i = 0; i < count; ++i) {
-        do {
-            if (sizeof(*buf) != getrandom(buf + i, sizeof(*buf), 0))
-                return 1;
-            buf[i] &= mask;
-        } while (buf[i] > max);
-    }
-    return 0;
-}
-
-int pandemonium_csprng_uint64_range(uint64_t* buf, const size_t count, const uint64_t max) 
-{
-    if (max == 0 || buf == NULL)
-        return 1;
-
-    const int bits = 64 - __builtin_clzl(max);
-    const uint64_t mask = (bits == 64) ? (UINT64_MAX) : ((1UL << bits) - 1UL);
-
-    for (size_t i = 0; i < count; ++i) {
-        do {
-            if (sizeof(*buf) != getrandom(buf + i, sizeof(*buf), 0))
-                return 1;
-            buf[i] &= mask;
-        } while (buf[i] > max);
-    }
-    return 0;
-}
 /*******************************************************/
-
+/* work in progress
 static void pandemonium_chacha_block(uint32_t out[16], uint32_t const in[16])
 {
     uint32_t x[16];
@@ -215,5 +178,5 @@ static void pandemonium_chacha_block(uint32_t out[16], uint32_t const in[16])
     for (int i = 0; i < 16; ++i)
         out[i] = x[i] + in[i];
 }
-
+*/
 
