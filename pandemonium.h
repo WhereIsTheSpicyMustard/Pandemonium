@@ -4,6 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct Chacha20_ctx {
+    uint32_t key[8];
+    uint64_t counter;
+    uint64_t nonce;
+} Chacha20_ctx;
+
 void      pandemonium_splitmix64_set_state(const uint64_t x);
 uint64_t  pandemonium_splitmix64_next(void);
 uint64_t  pandemonium_splitmix64(const uint64_t x);
@@ -15,7 +21,25 @@ int       pandemonium_csprng_uint8(uint8_t* buf);
 int       pandemonium_csprng_uint16(uint16_t* buf);
 int       pandemonium_csprng_uint32(uint32_t* buf);
 int       pandemonium_csprng_uint64(uint64_t* buf);
+
+/* Writes count elements of size bytes each
+  into buf from getrandom.*/
 int       pandemonium_csprng_arr(void* buf, const size_t count, const size_t size);
+
+/* Writes count elements of size bytes each
+  into buf from getrandom.  Uses rejection
+  sampling to keep values in the range [0, max] */
 int       pandemonium_csprng_range(void* buf, const size_t count, const size_t size, const uint64_t max);
+
+/* Writes out_len psudo random bytes into
+  out.
+  You can use the same key but the nonce
+  must be different each time the function
+  is called.
+  Pointers must not alias.
+  Key stream has a period of 64 * UINT64_MAX. */
+void pandemonium_chacha20(Chacha20_ctx* ctx, void* out, const size_t out_len);
+int pandemonium_chacha20_genseed(Chacha20_ctx* ctx);
+
 
 #endif

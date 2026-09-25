@@ -8,15 +8,9 @@
 #include <assert.h>
 #include <errno.h>
 
-#define ROTL(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
-#define QR(a, b, c, d) do {      \
-(a) += (b); (d) ^= (a); (d) = ROTL((d), 16); \
-(c) += (d); (b) ^= (c); (b) = ROTL((b), 12); \
-(a) += (b); (d) ^= (a); (d) = ROTL((d),  8); \
-(c) += (d); (b) ^= (c); (b) = ROTL((b),  7); \
-} while (0)
+#define U64(c) UINT64_C(c)
 
-#define ROUNDS 20
+typedef unsigned char uchar;
 
 static uint64_t splitmix_state = 0;
 static uint64_t xorshift_state = 1;
@@ -28,17 +22,17 @@ void pandemonium_splitmix64_set_state(const uint64_t x)
 
 uint64_t pandemonium_splitmix64_next(void)
 {
-    uint64_t z = (splitmix_state += 0x9e3779b97f4a7c15ULL);
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    uint64_t z = (splitmix_state += U64(0x9e3779b97f4a7c15));
+    z = (z ^ (z >> 30)) * U64(0xbf58476d1ce4e5b9);
+    z = (z ^ (z >> 27)) * U64(0x94d049bb133111eb);
     return z ^ (z >> 31);
 }
 
 uint64_t pandemonium_splitmix64(const uint64_t x)
 {
-    uint64_t z = (x + 0x9e3779b97f4a7c15ULL);
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    uint64_t z = (x +      U64(0x9e3779b97f4a7c15));
+    z = (z ^ (z >> 30)) *  U64(0xbf58476d1ce4e5b9);
+    z = (z ^ (z >> 27)) *  U64(0x94d049bb133111eb);
     return z ^ (z >> 31);
 }
 
@@ -53,7 +47,7 @@ uint64_t pandemonium_xorshift64star_next(void)
     xorshift_state ^= xorshift_state >> 12;
     xorshift_state ^= xorshift_state << 25;
     xorshift_state ^= xorshift_state >> 27;
-    return xorshift_state * 0x2545F4914F6CDD1DULL;
+    return xorshift_state *  U64(0x2545F4914F6CDD1D);
 }
 
 // x must be nonzero
@@ -62,12 +56,11 @@ uint64_t pandemonium_xorshift64star(uint64_t x)
     x ^= x >> 12;
     x ^= x << 25;
     x ^= x >> 27;
-    return x * 0x2545F4914F6CDD1DULL;
+    return x * U64(0x2545F4914F6CDD1D);
 }
 
 /*******************************************************/
 
-// These functions don't check for null, that is by design.
 int pandemonium_csprng_uint8(uint8_t* buf)
 {
     return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
@@ -101,9 +94,9 @@ int pandemonium_csprng_arr(void* buf, const size_t count, const size_t size)
     size_t remaining_bytes = total_bytes;
 
     while (remaining_bytes > 0) {
-        const ssize_t result = getrandom((unsigned char*)buf + total_bytes - remaining_bytes, remaining_bytes, 0);
+        const ssize_t result = getrandom((uchar*)buf + total_bytes - remaining_bytes, remaining_bytes, 0);
         fprintf(stderr, "Random bytes written: %zd\n", result);
-        if (result == -1) {
+        if (result < 0) {
             if (errno == EINTR)
                 continue;   // interrupted by a signal before any bytes were read, just retry
             return 1;
@@ -139,11 +132,11 @@ int pandemonium_csprng_range(void* buf, const size_t count, const size_t size, c
 
         for (size_t i = 0; (i + size) <= chunk_size; i += size) {
             uint64_t candidate = 0;
-            memcpy(&candidate, (unsigned char*)random_bytes + i, size);
+            memcpy(&candidate, (uchar*)random_bytes + i, size);
             candidate &= mask;
 
             if (candidate > max) continue;
-            memcpy((unsigned char*)buf + buf_index, &candidate, size);
+            memcpy((uchar*)buf + buf_index, &candidate, size);
             buf_index += size;
             if (!((buf_index + size) <= total_bytes))
                 break;
@@ -158,25 +151,61 @@ CLEANUP:
 }
 
 /*******************************************************/
-/* work in progress
-static void pandemonium_chacha_block(uint32_t out[16], uint32_t const in[16])
-{
-    uint32_t x[16];
 
-    for (int i = 0; i < 16; ++i)
-        x[i] = in[i];
-    for (int i = 0; i < ROUNDS; i += 2) {
-        QR(x[0], x[4], x[ 8], x[12]);
-        QR(x[1], x[5], x[ 9], x[13]);
-        QR(x[2], x[6], x[10], x[14]);
-        QR(x[3], x[7], x[11], x[15]);
-        QR(x[0], x[5], x[10], x[15]);
-        QR(x[1], x[6], x[11], x[12]);
-        QR(x[2], x[7], x[ 8], x[13]);
-        QR(x[3], x[4], x[ 9], x[14]);
+#define STATE_SIZE 16
+#define ROUNDS 10
+#define BLOCK_SIZE 64
+
+#define ROTL(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
+#define QR(a, b, c, d) do {                      \
+    (a) += (b); (d) ^= (a); (d) = ROTL((d), 16); \
+    (c) += (d); (b) ^= (c); (b) = ROTL((b), 12); \
+    (a) += (b); (d) ^= (a); (d) = ROTL((d), 8);  \
+    (c) += (d); (b) ^= (c); (b) = ROTL((b), 7);  \
+} while(0)
+
+static void chacha20_block(uint32_t* restrict x, const uint32_t* restrict const state)
+{
+    for (int i = 0; i < STATE_SIZE; ++i)
+        x[i] = state[i];
+    for (int i = 0; i < ROUNDS; ++i) {
+        QR(x[0], x[4], x[8],  x[12]); QR(x[1], x[5], x[9],  x[13]);
+        QR(x[2], x[6], x[10], x[14]); QR(x[3], x[7], x[11], x[15]);
+        QR(x[0], x[5], x[10], x[15]); QR(x[1], x[6], x[11], x[12]);
+        QR(x[2], x[7], x[8],  x[13]); QR(x[3], x[4], x[9],  x[14]);
     }
-    for (int i = 0; i < 16; ++i)
-        out[i] = x[i] + in[i];
+    for (int i = 0; i < STATE_SIZE; ++i)
+        x[i] += state[i];
 }
-*/
+
+void pandemonium_chacha20(Chacha20_ctx* restrict ctx, void* restrict out, const size_t out_size)
+{
+    assert(ctx != NULL);
+    assert(out != NULL);
+
+    if (ctx == NULL || out == NULL || out_size == 0) return;
+
+    uint32_t state[STATE_SIZE] = {
+        [0]  = 0x61707865,   [1]  = 0x3320646e,    [2]  = 0x79622d32,    [3]  = 0x6b206574,
+        [4]  = ctx->key[0],  [5]  = ctx->key[1],   [6]  = ctx->key[2],   [7]  = ctx->key[3],
+        [8]  = ctx->key[4],  [9]  = ctx->key[5],   [10] = ctx->key[6],   [11] = ctx->key[7],
+        [12] = (uint32_t)(ctx->counter & UINT32_MAX), [13] = (uint32_t)(ctx->counter >> 32),
+        [14] = (uint32_t)(ctx->nonce & UINT32_MAX),   [15] = (uint32_t)(ctx->nonce >> 32)
+    };
+
+    uint32_t x[STATE_SIZE];
+    for (size_t i = 0; i < out_size; i += BLOCK_SIZE) {
+        chacha20_block(x, state);
+        ++(ctx->counter);
+        state[12] = (uint32_t)(ctx->counter & UINT32_MAX);
+        state[13] = (uint32_t)(ctx->counter >> 32);
+        memcpy((uint8_t*)out + i, x, BLOCK_SIZE <= (out_size - i) ? BLOCK_SIZE : (out_size - i));
+    }
+}
+
+int pandemonium_chacha20_genseed(Chacha20_ctx* ctx)
+{
+    assert(ctx != NULL);
+    return (32 != getrandom(ctx->key, 32, 0));
+}
 
