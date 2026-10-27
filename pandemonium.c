@@ -97,7 +97,7 @@ int pandemonium_csprng_arr(void* buf, const size_t count, const size_t size)
 
     while (remaining_bytes > 0) {
         const ssize_t result = getrandom((uchar*)buf + total_bytes - remaining_bytes, remaining_bytes, 0);
-        fprintf(stderr, "Random bytes written: %zd\n", result);
+        // fprintf(stderr, "Random bytes written: %zd\n", result);
         if (result < 0) {
             if (errno == EINTR)
                 continue;   // interrupted by a signal before any bytes were read, just retry
@@ -170,15 +170,15 @@ CLEANUP:
 
 static inline void chacha20_block(uint32_t x[static restrict CHACHA20_STATE_SIZE], const uint32_t state[static restrict CHACHA20_STATE_SIZE])
 {
-    for (int i = 0; i < CHACHA20_STATE_SIZE; ++i)
+    for (uint i = 0; i < CHACHA20_STATE_SIZE; ++i)
         x[i] = state[i];
-    for (int i = 0; i < CHACHA20_ROUNDS; ++i) {
+    for (uint i = 0; i < CHACHA20_ROUNDS; ++i) {
         CHACHA20_QR(x[0], x[4], x[8],  x[12]); CHACHA20_QR(x[1], x[5], x[9],  x[13]);
         CHACHA20_QR(x[2], x[6], x[10], x[14]); CHACHA20_QR(x[3], x[7], x[11], x[15]);
         CHACHA20_QR(x[0], x[5], x[10], x[15]); CHACHA20_QR(x[1], x[6], x[11], x[12]);
         CHACHA20_QR(x[2], x[7], x[8],  x[13]); CHACHA20_QR(x[3], x[4], x[9],  x[14]);
     }
-    for (int i = 0; i < CHACHA20_STATE_SIZE; ++i)
+    for (uint i = 0; i < CHACHA20_STATE_SIZE; ++i)
         x[i] += state[i];
 }
 
@@ -252,12 +252,12 @@ static void sha256_process_block(const uint32_t block[static restrict 16], uint3
     uint32_t c = H[2]; uint32_t g = H[6];
     uint32_t d = H[3]; uint32_t h = H[7];
 
-    for (int t = 0; t < 16; t++) // first 16 words
+    for (uint t = 0; t < 16; t++) // first 16 words
         W[t] = block[t];
-    for (int t = 16; t < 64; t++) // compute remaining schedule
+    for (uint t = 16; t < 64; t++) // compute remaining schedule
         W[t] = SHA256_SIG1(W[t-2]) + W[t-7] + SHA256_SIG0(W[t-15]) + W[t-16];
 
-    for (int t = 0; t < 64; t++) {
+    for (uint t = 0; t < 64; t++) {
         const uint32_t T1 = h + SHA256_CSIG1(e) + CH(e, f, g) + SHA256_K[t] + W[t];
         const uint32_t T2 = SHA256_CSIG0(a) + MAJ(a, b, c);
         h = g;
@@ -279,7 +279,7 @@ static void sha256_process_block(const uint32_t block[static restrict 16], uint3
 
 // assumes M has already been checked for NULL
 // length is in bytes
-static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const size_t length, size_t* restrict new_length)
+static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const uint64_t length, uint64_t* restrict new_length)
 {
     *new_length = ((length + 8 + 64) / 64) * 64;
 
@@ -295,12 +295,12 @@ static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const s
 
      // append length
     uint64_t bit_length = (uint64_t)length * 8;
-    for (size_t i = 0; i < 8; i++) {
+    for (uint i = 0; i < 8; i++) {
         M2_bytes[*new_length - 1 - i] =
         (uint8_t)(bit_length >> (i * 8));
     }
 
-    for (size_t i = 0; i < *new_length; i += 4) {
+    for (uint64_t i = 0; i < *new_length; i += 4) {
         const uint32_t word =
         ((uint32_t)M2_bytes[i + 0] << 24) |
         ((uint32_t)M2_bytes[i + 1] << 16) |
@@ -312,11 +312,11 @@ static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const s
     return M2;
 }
 
-int pandemonium_sha256(const uint8_t* restrict buf, const size_t length, uint32_t H[static restrict 8])
+int pandemonium_sha256(const uint8_t* restrict buf, const uint64_t length, uint32_t H[static restrict 8])
 {
     if (buf == NULL) return 1;
 
-    size_t new_length;
+    uint64_t new_length;
     uint32_t* M = sha256_parse_message(buf, length, &new_length); // new_length is in bytes
     if (M == NULL) return 1;
     new_length /= 4; // get new_length in terms of number of words (4 bytes each)
@@ -327,7 +327,7 @@ int pandemonium_sha256(const uint8_t* restrict buf, const size_t length, uint32_
     H[2] = 0x3c6ef372; H[6] = 0x1f83d9ab;
     H[3] = 0xa54ff53a; H[7] = 0x5be0cd19;
 
-    for (size_t i = 0; i < new_length; i += 16)
+    for (uint64_t i = 0; i < new_length; i += 16)
         sha256_process_block(M + i, H);
 
     free(M);
@@ -384,7 +384,7 @@ static void sha512_process_block(const uint64_t block[static restrict 16], uint6
     for (uint t = 16; t < 80; t++) // compute remaining schedule
         W[t] = SHA512_SIG1(W[t-2]) + W[t-7] + SHA512_SIG0(W[t-15]) + W[t-16];
 
-    for (int t = 0; t < 80; t++) {
+    for (uint t = 0; t < 80; t++) {
         const uint64_t T1 = h + SHA512_CSIG1(e) + CH(e, f, g) + SHA512_K[t] + W[t];
         const uint64_t T2 = SHA512_CSIG0(a) + MAJ(a, b, c);
         h = g;
@@ -405,7 +405,7 @@ static void sha512_process_block(const uint64_t block[static restrict 16], uint6
 }
 
 // length is in bytes
-static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const size_t length, size_t* restrict new_length)
+static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const uint64_t length, uint64_t* restrict new_length)
 {
     *new_length = ((length + 16 + 128) / 128) * 128;
 
@@ -419,12 +419,12 @@ static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const s
 
     // append length
     uint64_t bit_length = (uint64_t)length * 8;
-    for (size_t i = 0; i < 8; i++)
+    for (uint i = 0; i < 8; i++)
         M2_bytes[*new_length - 1 - i] =
             (uint8_t)(bit_length >> (i * 8));
 
     // Convert to big endian
-    for (size_t i = 0; i < *new_length; i += 8) {
+    for (uint64_t i = 0; i < *new_length; i += 8) {
         const uint64_t word =
             ((uint64_t)M2_bytes[i + 0] << 56) |
             ((uint64_t)M2_bytes[i + 1] << 48) |
@@ -440,11 +440,11 @@ static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const s
     return M2;
 }
 
-int pandemonium_sha512(const uint8_t* restrict buf, const size_t length, uint64_t H[static restrict 8])
+int pandemonium_sha512(const uint8_t* restrict buf, const uint64_t length, uint64_t H[static restrict 8])
 {
     if (buf == NULL) return 1;
 
-    size_t new_length;
+    uint64_t new_length;
     uint64_t* M = sha512_parse_message(buf, length, &new_length); // new_length is in bytes
     if (M == NULL) return 1;
     new_length /= 8; // get new_length in terms of number of words (8 bytes each)
@@ -455,7 +455,7 @@ int pandemonium_sha512(const uint8_t* restrict buf, const size_t length, uint64_
     H[4] = U64(0x510e527fade682d1); H[5] = U64(0x9b05688c2b3e6c1f);
     H[6] = U64(0x1f83d9abfb41bd6b); H[7] = U64(0x5be0cd19137e2179);
 
-    for (size_t i = 0; i < new_length; i += 16)
+    for (uint64_t i = 0; i < new_length; i += 16)
         sha512_process_block(M + i, H);
 
     free(M);
