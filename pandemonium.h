@@ -45,4 +45,7 @@ int pandemonium_chacha20_genseed(Chacha20_ctx* ctx);
 // Writes the sha-256 hash of buf[length] into H[8].
 int pandemonium_sha256(const uint8_t* restrict buf, const size_t length, uint32_t H[static restrict 8]);
 
+// Writes the SHA-512 hash of buf[lenght] into H[8].
+int pandemonium_sha512(const uint8_t* restrict buf, const size_t length, uint64_t H[static restrict 8]);
+
 #endif
