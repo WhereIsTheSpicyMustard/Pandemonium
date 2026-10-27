@@ -32,13 +32,12 @@ uint64_t pandemonium_splitmix64_next(void)
 
 uint64_t pandemonium_splitmix64(const uint64_t x)
 {
-    uint64_t z = (x +      U64(0x9e3779b97f4a7c15));
-    z = (z ^ (z >> 30)) *  U64(0xbf58476d1ce4e5b9);
-    z = (z ^ (z >> 27)) *  U64(0x94d049bb133111eb);
+    uint64_t z = (x + U64(0x9e3779b97f4a7c15));
+    z = (z ^ (z >> 30)) * U64(0xbf58476d1ce4e5b9);
+    z = (z ^ (z >> 27)) * U64(0x94d049bb133111eb);
     return z ^ (z >> 31);
 }
 
-// initial seed must be nonzero
 void pandemonium_xorshift64star_set_state(const uint64_t x)
 {
     xorshift_state = x;
@@ -49,10 +48,9 @@ uint64_t pandemonium_xorshift64star_next(void)
     xorshift_state ^= xorshift_state >> 12;
     xorshift_state ^= xorshift_state << 25;
     xorshift_state ^= xorshift_state >> 27;
-    return xorshift_state *  U64(0x2545F4914F6CDD1D);
+    return xorshift_state * U64(0x2545F4914F6CDD1D);
 }
 
-// x must be nonzero
 uint64_t pandemonium_xorshift64star(uint64_t x)
 {
     x ^= x >> 12;
@@ -63,29 +61,7 @@ uint64_t pandemonium_xorshift64star(uint64_t x)
 
 /*******************************************************/
 
-int pandemonium_csprng_uint8(uint8_t* buf)
-{
-    return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
-}
-
-int pandemonium_csprng_uint16(uint16_t* buf)
-{
-    return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
-}
-
-int pandemonium_csprng_uint32(uint32_t* buf)
-{
-    return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
-}
-
-int pandemonium_csprng_uint64(uint64_t* buf)
-{
-    return (getrandom(buf, sizeof(*buf), 0) != sizeof(*buf));
-}
-
-/*******************************************************/
-
-int pandemonium_csprng_arr(void* buf, const size_t count, const size_t size)
+int pandemonium_csprng(void* buf, const size_t count, const size_t size)
 {
     if (buf == NULL || count == 0 || size == 0)
         return 1;
@@ -103,7 +79,7 @@ int pandemonium_csprng_arr(void* buf, const size_t count, const size_t size)
                 continue;   // interrupted by a signal before any bytes were read, just retry
             return 1;
         }
-        assert((size_t)result <= remaining_bytes);
+        // assert((size_t)result <= remaining_bytes);
         remaining_bytes = remaining_bytes - (size_t)result;
     }
     return 0;
@@ -129,7 +105,7 @@ int pandemonium_csprng_range(void* buf, const size_t count, const size_t size, c
     size_t buf_index = 0;
     while (buf_index < total_bytes) {
         const size_t chunk_size = (total_bytes - buf_index < 256) ? 256 : (total_bytes - buf_index);
-        if (pandemonium_csprng_arr(random_bytes, chunk_size, 1))
+        if (pandemonium_csprng(random_bytes, chunk_size, 1))
             goto CLEANUP;
 
         for (size_t i = 0; (i + size) <= chunk_size; i += size) {
@@ -208,7 +184,12 @@ void pandemonium_chacha20(Chacha20_ctx* restrict ctx, void* restrict out, const 
 int pandemonium_chacha20_genseed(Chacha20_ctx* ctx)
 {
     if (ctx == NULL) return 1;
-    return (32 != getrandom(ctx->key, 32, 0));
+    uint8_t buf[256] = {0};
+    if (256 != getrandom(buf, 256, 0))
+        return 1;
+    if (pandemonium_sha256(buf, 256, ctx->key))
+        return 1;
+    return 0;
 }
 
 
@@ -464,6 +445,3 @@ int pandemonium_sha512(const uint8_t* restrict buf, const uint64_t length, uint6
 }
 
 
-/*******************************************************/
-// SHA-512/256
-/*******************************************************/
