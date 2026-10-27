@@ -31,15 +31,18 @@ int       pandemonium_csprng_arr(void* buf, const size_t count, const size_t siz
   sampling to keep values in the range [0, max] */
 int       pandemonium_csprng_range(void* buf, const size_t count, const size_t size, const uint64_t max);
 
-/* Writes out_len psudo random bytes into
-  out.
-  You can use the same key but the nonce
-  must be different each time the function
-  is called.
-  Pointers must not alias.
-  Key stream has a period of 64 * UINT64_MAX. */
-void pandemonium_chacha20(Chacha20_ctx* ctx, void* out, const size_t out_len);
+/* Writes out_size bytes generated from the chacha20 stream cipher into out[out_size].
+ * Pointers must not be NULL.
+ * Pointers must not alias.
+ * Set the key, nonce and counter before using this function.
+ * You can use the same key but with a different nonce to get independant streams from the same key.
+ * Key stream has a period of 64 * UINT64_MAX */
+void pandemonium_chacha20(Chacha20_ctx* restrict ctx, void* restrict out, const size_t out_size);
+
+// Returns 0 on success, writes random bytes into ctx.key
 int pandemonium_chacha20_genseed(Chacha20_ctx* ctx);
 
+// Writes the sha-256 hash of buf[length] into H[8].
+int pandemonium_sha256(const uint8_t* restrict buf, const size_t length, uint32_t H[static restrict 8]);
 
 #endif
