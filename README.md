@@ -1,1 +1,1 @@
-Contains various prng algorithms such as splitmix64 and xorshift64star.  Also contains crypto-graphically secure random number generators derived from urandom and getrandom() C standard library function.  Will eventually contain other CSPRNG's such as chacha20.
+Contains various prng algorithms such as splitmix64 and xorshift64star.  Also contains crypto-graphically secure random number generators derived from urandom and getrandom() C standard library function.  Contains the CHACHA20 stream cipher, as well as the SHA-256 and SHA-512 hash algorithms.
