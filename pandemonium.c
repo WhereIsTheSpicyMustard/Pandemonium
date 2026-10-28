@@ -181,15 +181,22 @@ void pandemonium_chacha20(Chacha20_ctx* restrict ctx, void* restrict out, const 
     }
 }
 
+#define CHACHA20_GENSEED_ENTROPY_SIZE 256
 int pandemonium_chacha20_genseed(Chacha20_ctx* ctx)
 {
+    int ret = 1;
+
     if (ctx == NULL) return 1;
-    uint8_t buf[256] = {0};
-    if (256 != getrandom(buf, 256, 0))
-        return 1;
-    if (pandemonium_sha256(buf, 256, ctx->key))
-        return 1;
-    return 0;
+    uint8_t* buf = malloc(CHACHA20_GENSEED_ENTROPY_SIZE);
+    if (NULL == buf) return 1;
+
+    if (CHACHA20_GENSEED_ENTROPY_SIZE != getrandom(buf, CHACHA20_GENSEED_ENTROPY_SIZE, 0))
+        goto cleanup;
+    ret = pandemonium_sha256(ctx->key, buf, CHACHA20_GENSEED_ENTROPY_SIZE);
+
+cleanup:
+    free(buf);
+    return ret;
 }
 
 
@@ -293,12 +300,12 @@ static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const u
     return M2;
 }
 
-int pandemonium_sha256(const uint8_t* restrict buf, const uint64_t length, uint32_t H[static restrict 8])
+int pandemonium_sha256(uint32_t H[static restrict 8], const void* restrict buf, const uint64_t length)
 {
     if (buf == NULL) return 1;
 
     uint64_t new_length;
-    uint32_t* M = sha256_parse_message(buf, length, &new_length); // new_length is in bytes
+    uint32_t* M = sha256_parse_message((uint8_t*)buf, length, &new_length); // new_length is in bytes
     if (M == NULL) return 1;
     new_length /= 4; // get new_length in terms of number of words (4 bytes each)
 
@@ -421,12 +428,12 @@ static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const u
     return M2;
 }
 
-int pandemonium_sha512(const uint8_t* restrict buf, const uint64_t length, uint64_t H[static restrict 8])
+int pandemonium_sha512(uint64_t H[static restrict 8], const void* restrict buf, const uint64_t length)
 {
     if (buf == NULL) return 1;
 
     uint64_t new_length;
-    uint64_t* M = sha512_parse_message(buf, length, &new_length); // new_length is in bytes
+    uint64_t* M = sha512_parse_message((uint8_t*)buf, length, &new_length); // new_length is in bytes
     if (M == NULL) return 1;
     new_length /= 8; // get new_length in terms of number of words (8 bytes each)
 
