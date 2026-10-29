@@ -233,12 +233,10 @@ static const uint32_t SHA256_K[64] = {
 static void sha256_process_block(const uint32_t block[static restrict 16], uint32_t H[static restrict 8])
 {
     uint32_t W[64]; // message schedule
+    uint32_t var[8]; // init working variables
 
-    // init working variables
-    uint32_t a = H[0]; uint32_t e = H[4];
-    uint32_t b = H[1]; uint32_t f = H[5];
-    uint32_t c = H[2]; uint32_t g = H[6];
-    uint32_t d = H[3]; uint32_t h = H[7];
+    for (uint i = 0; i < 8; ++i)
+        var[i] = H[i];
 
     for (uint t = 0; t < 16; t++) // first 16 words
         W[t] = block[t];
@@ -246,23 +244,21 @@ static void sha256_process_block(const uint32_t block[static restrict 16], uint3
         W[t] = SHA256_SIG1(W[t-2]) + W[t-7] + SHA256_SIG0(W[t-15]) + W[t-16];
 
     for (uint t = 0; t < 64; t++) {
-        const uint32_t T1 = h + SHA256_CSIG1(e) + CH(e, f, g) + SHA256_K[t] + W[t];
-        const uint32_t T2 = SHA256_CSIG0(a) + MAJ(a, b, c);
-        h = g;
-        g = f;
-        f = e;
-        e = d + T1;
-        d = c;
-        c = b;
-        b = a;
-        a = T1 + T2;
+        const uint32_t T1 = var[7] + SHA256_CSIG1(var[4]) + CH(var[4], var[5], var[6]) + SHA256_K[t] + W[t];
+        const uint32_t T2 = SHA256_CSIG0(var[0]) + MAJ(var[0], var[1], var[2]);
+        var[7] = var[6];
+        var[6] = var[5];
+        var[5] = var[4];
+        var[4] = var[3] + T1;
+        var[3] = var[2];
+        var[2] = var[1];
+        var[1] = var[0];
+        var[0] = T1 + T2;
     }
 
     // update hash values
-    H[0] = a + H[0]; H[4] = e + H[4];
-    H[1] = b + H[1]; H[5] = f + H[5];
-    H[2] = c + H[2]; H[6] = g + H[6];
-    H[3] = d + H[3]; H[7] = h + H[7];
+    for (uint i = 0; i < 8; ++i)
+        H[i] += var[i];
 }
 
 // assumes M has already been checked for NULL
@@ -303,6 +299,7 @@ static inline uint32_t* sha256_parse_message(const uint8_t* restrict M1, const u
 int pandemonium_sha256(uint32_t H[static restrict 8], const void* restrict buf, const uint64_t length)
 {
     if (buf == NULL) return 1;
+    if (length > (UINT64_MAX / 8)) return 1;
 
     uint64_t new_length;
     uint32_t* M = sha256_parse_message((uint8_t*)buf, length, &new_length); // new_length is in bytes
@@ -360,12 +357,10 @@ static const uint64_t SHA512_K[80] = {
 static void sha512_process_block(const uint64_t block[static restrict 16], uint64_t H[static restrict 8])
 {
     uint64_t W[80]; // message schedule
+    uint64_t var[8]; // init working variables
 
-    // init working variables
-    uint64_t a = H[0]; uint64_t e = H[4];
-    uint64_t b = H[1]; uint64_t f = H[5];
-    uint64_t c = H[2]; uint64_t g = H[6];
-    uint64_t d = H[3]; uint64_t h = H[7];
+    for (uint i = 0; i < 8; ++i)
+        var[i] = H[i];
 
     for (uint t = 0; t < 16; t++) // first 16 words
         W[t] = block[t];
@@ -373,23 +368,21 @@ static void sha512_process_block(const uint64_t block[static restrict 16], uint6
         W[t] = SHA512_SIG1(W[t-2]) + W[t-7] + SHA512_SIG0(W[t-15]) + W[t-16];
 
     for (uint t = 0; t < 80; t++) {
-        const uint64_t T1 = h + SHA512_CSIG1(e) + CH(e, f, g) + SHA512_K[t] + W[t];
-        const uint64_t T2 = SHA512_CSIG0(a) + MAJ(a, b, c);
-        h = g;
-        g = f;
-        f = e;
-        e = d + T1;
-        d = c;
-        c = b;
-        b = a;
-        a = T1 + T2;
+        const uint64_t T1 = var[7] + SHA512_CSIG1(var[4]) + CH(var[4], var[5], var[6]) + SHA512_K[t] + W[t];
+        const uint64_t T2 = SHA512_CSIG0(var[0]) + MAJ(var[0], var[1], var[2]);
+        var[7] = var[6];
+        var[6] = var[5];
+        var[5] = var[4];
+        var[4] = var[3] + T1;
+        var[3] = var[2];
+        var[2] = var[1];
+        var[1] = var[0];
+        var[0] = T1 + T2;
     }
 
     // update hash values
-    H[0] = a + H[0]; H[4] = e + H[4];
-    H[1] = b + H[1]; H[5] = f + H[5];
-    H[2] = c + H[2]; H[6] = g + H[6];
-    H[3] = d + H[3]; H[7] = h + H[7];
+    for (uint i = 0; i < 8; ++i)
+        H[i] += var[i];
 }
 
 // length is in bytes
@@ -431,6 +424,7 @@ static inline uint64_t* sha512_parse_message(const uint8_t* restrict M1, const u
 int pandemonium_sha512(uint64_t H[static restrict 8], const void* restrict buf, const uint64_t length)
 {
     if (buf == NULL) return 1;
+    if (length > (UINT64_MAX / 8)) return 1;
 
     uint64_t new_length;
     uint64_t* M = sha512_parse_message((uint8_t*)buf, length, &new_length); // new_length is in bytes
