@@ -18,11 +18,11 @@ typedef struct {
 } sha512test_t;
 
 sha256test_t sha256_tests[] = {
-    #include "sha256tests.inc"
+    #include "sha256tests.c"
 };
 
 static sha512test_t sha512_tests[] = {
-    #include "sha512tests.inc"
+    #include "sha512tests.c"
 };
 
 static uint8_t parse_char(const char c)
